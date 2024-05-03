@@ -2,7 +2,7 @@ use std::{collections::HashMap, str::FromStr};
 
 use anyhow::{anyhow, Result};
 use fedimint_client::oplog::UpdateStreamOrOutcome;
-use fedimint_core::{config::FederationId, task::spawn};
+use fedimint_core::{config::FederationId, task::spawn, PeerId};
 use fedimint_ln_client::{LightningClientModule, LnReceiveState};
 use futures::StreamExt;
 use itertools::Itertools;
@@ -135,12 +135,20 @@ async fn notify_user(
     user: AppUser,
 ) -> Result<()> {
     let zap = state.db.get_zap_by_id(invoice.id)?;
+    let invite_code = state
+        .mm
+        .get_federation_client(FederationId::from_str(&invoice.federation_id)?)
+        .await
+        .ok_or(anyhow!("Internal error: No federation client"))?
+        .get_config()
+        .invite_code(&PeerId::from_str("0")?)
+        .ok_or(anyhow!("Internal error: No invite code for 0"))?;
 
     let dm = nostr
         .send_direct_msg(
             ::nostr::PublicKey::from_str(&user.pubkey)?,
             json!({
-                "federation_id": invoice.federation_id,
+                "invite_code": invite_code,
                 "tweak_index": invoice.user_invoice_index,
                 "amount": invoice.amount,
                 "bolt11": invoice.bolt11,

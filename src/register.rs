@@ -79,32 +79,6 @@ pub async fn register(
     PublicKey::from_str(&req.pubkey)
         .map_err(|_| (StatusCode::BAD_REQUEST, "Nostr Pubkey Invalid".to_string()))?;
 
-    // a different signer based on paid vs free
-    let signer = if requested_paid {
-        state.paid_pk
-    } else {
-        state.free_pk
-    };
-
-    // verify token and double check that it has not been spent before
-    if !req.verify(signer) {
-        return Err((StatusCode::UNAUTHORIZED, "Invalid blind sig".to_string()));
-    }
-
-    let user_msg_hex = serde_json::to_string(&req.msg)
-        .map_err(|_| (StatusCode::BAD_REQUEST, "Nostr blinded message".to_string()))?;
-    match state.db.get_user_by_token(user_msg_hex.clone()) {
-        Ok(Some(u)) => {
-            // if token has already been spent, just return the registered user info
-            return Ok(RegisterResponse { name: u.name });
-        }
-        Ok(None) => (),
-        Err(e) => {
-            error!("Error in register: {e:?}");
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, "ServerError".to_string()));
-        }
-    }
-
     let name_to_register = if requested_paid {
         req.name.clone().unwrap().clone()
     } else {
@@ -143,7 +117,6 @@ pub async fn register(
         pubkey: req.pubkey,
         name: name_to_register.clone(),
         federation_id: federation_id.to_string(),
-        unblinded_msg: user_msg_hex,
         federation_invite_code: req.federation_invite_code,
     };
     match state.db.insert_new_user(new_user) {

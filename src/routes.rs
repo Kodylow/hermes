@@ -259,13 +259,11 @@ pub struct RegisterRequest {
     pub name: Option<String>,
     pub pubkey: String,
     pub federation_invite_code: String,
-    pub msg: tbs::Message,
-    pub sig: tbs::Signature,
 }
 
 impl RegisterRequest {
-    pub fn verify(&self, pubkey: AggregatePublicKey) -> bool {
-        tbs::verify(self.msg, self.sig, pubkey)
+    pub fn _verify(&self, _pubkey: AggregatePublicKey) -> bool {
+        true
     }
 }
 
