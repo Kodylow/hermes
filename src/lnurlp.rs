@@ -3,7 +3,7 @@ use std::str::FromStr;
 use crate::{
     invoice::{spawn_invoice_subscription, InvoiceState},
     mint::select_gateway,
-    models::{invoice::NewInvoice, zaps::Zap},
+    models::{app_user::NewAppUser, invoice::NewInvoice, zaps::Zap},
     routes::{LnurlCallbackParams, LnurlCallbackResponse, LnurlVerifyResponse},
     State,
 };
@@ -29,7 +29,20 @@ pub async fn well_known_lnurlp(
 ) -> anyhow::Result<LnurlWellKnownResponse> {
     let user = state.db.get_user_by_name(name.clone())?;
     if user.is_none() {
-        return Err(anyhow!("Not Found"));
+        // try is an npub
+        let pubkey = nostr::PublicKey::from_str(&name)?;
+
+        let new_app_user = NewAppUser {
+            pubkey: pubkey.to_hex(),
+            name: name.clone(),
+            federation_id: state
+                .default_federation_invite_code
+                .federation_id()
+                .to_string(),
+            federation_invite_code: state.default_federation_invite_code.to_string(),
+        };
+
+        state.db.insert_new_user(new_app_user)?;
     }
 
     let res = LnurlWellKnownResponse {

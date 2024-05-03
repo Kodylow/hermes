@@ -3,11 +3,12 @@ use axum::http::{Method, StatusCode, Uri};
 use axum::routing::get;
 use axum::{extract::DefaultBodyLimit, routing::post};
 use axum::{http, Extension, Router, TypedHeader};
+use fedimint_core::api::InviteCode;
 use log::{error, info};
 use nostr_sdk::nostr::Keys;
 use secp256k1::{All, Secp256k1};
 use std::{path::PathBuf, str::FromStr, sync::Arc};
-use tbs::{AggregatePublicKey, PubKeyPoint};
+// use tbs::{AggregatePublicKey, PubKeyPoint};
 use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::oneshot;
 use tower_http::cors::{AllowOrigin, CorsLayer};
@@ -72,8 +73,9 @@ pub struct State {
     pub nostr: nostr_sdk::Client,
     pub nostr_sk: Keys,
     pub domain: String,
-    pub free_pk: AggregatePublicKey,
-    pub paid_pk: AggregatePublicKey,
+    pub default_federation_invite_code: InviteCode,
+    // pub free_pk: AggregatePublicKey,
+    // pub paid_pk: AggregatePublicKey,
 }
 
 impl State {
@@ -105,25 +107,30 @@ async fn main() -> anyhow::Result<()> {
     let mm = setup_multimint(fm_db_path)
         .await
         .expect("should set up mints");
+    let default_federation_invite_code = InviteCode::from_str(
+        &std::env::var("DEFAULT_FEDERATION_INVITE_CODE")
+            .expect("DEFAULT_FEDERATION_INVITE_CODE must be set"),
+    )
+    .expect("Invalid DEFAULT_FEDERATION_INVITE_CODE");
 
-    let free_pk = std::env::var("FREE_PK").expect("FREE_PK must be set");
-    let paid_pk = std::env::var("PAID_PK").expect("PAID_PK must be set");
-    let free_pk: AggregatePublicKey = AggregatePublicKey(
-        PubKeyPoint::from_compressed(
-            hex::decode(&free_pk).expect("Invalid key hex")[..]
-                .try_into()
-                .expect("Invalid key byte key"),
-        )
-        .expect("Invalid FREE_PK"),
-    );
-    let paid_pk: AggregatePublicKey = AggregatePublicKey(
-        PubKeyPoint::from_compressed(
-            hex::decode(&paid_pk).expect("Invalid key hex")[..]
-                .try_into()
-                .expect("Invalid key byte key"),
-        )
-        .expect("Invalid PAID_PK"),
-    );
+    // let free_pk = std::env::var("FREE_PK").expect("FREE_PK must be set");
+    // let paid_pk = std::env::var("PAID_PK").expect("PAID_PK must be set");
+    // let free_pk: AggregatePublicKey = AggregatePublicKey(
+    //     PubKeyPoint::from_compressed(
+    //         hex::decode(&free_pk).expect("Invalid key hex")[..]
+    //             .try_into()
+    //             .expect("Invalid key byte key"),
+    //     )
+    //     .expect("Invalid FREE_PK"),
+    // );
+    // let paid_pk: AggregatePublicKey = AggregatePublicKey(
+    //     PubKeyPoint::from_compressed(
+    //         hex::decode(&paid_pk).expect("Invalid key hex")[..]
+    //             .try_into()
+    //             .expect("Invalid key byte key"),
+    //     )
+    //     .expect("Invalid PAID_PK"),
+    // );
 
     // nostr
     let nostr_nsec_str = std::env::var("NSEC").expect("NSEC must be set");
@@ -149,8 +156,9 @@ async fn main() -> anyhow::Result<()> {
         nostr,
         nostr_sk,
         domain,
-        free_pk,
-        paid_pk,
+        default_federation_invite_code,
+        // free_pk,
+        // paid_pk,
     };
 
     // spawn a task to check for previous pending invoices
