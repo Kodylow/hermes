@@ -13,7 +13,7 @@ pub struct AppUser {
     pub id: i32,
     pub pubkey: String,
     pub name: String,
-    pub unblinded_msg: String,
+    // pub unblinded_msg: String,
     pub federation_id: String,
     pub federation_invite_code: String,
     pub invoice_index: i32,
@@ -72,12 +72,12 @@ impl AppUser {
             == 0)
     }
 
-    pub fn get_by_token(conn: &mut PgConnection, msg: String) -> anyhow::Result<Option<AppUser>> {
-        Ok(app_user::table
-            .filter(app_user::unblinded_msg.eq(msg))
-            .first::<AppUser>(conn)
-            .optional()?)
-    }
+    // pub fn get_by_token(conn: &mut PgConnection, msg: String) -> anyhow::Result<Option<AppUser>> {
+    //     Ok(app_user::table
+    //         .filter(app_user::unblinded_msg.eq(msg))
+    //         .first::<AppUser>(conn)
+    //         .optional()?)
+    // }
 
     pub fn get_by_pubkey(
         conn: &mut PgConnection,
@@ -123,7 +123,6 @@ pub struct NewAppUser {
     pub pubkey: String,
     pub name: String,
     pub federation_id: String,
-    pub unblinded_msg: String,
     pub federation_invite_code: String,
 }
 

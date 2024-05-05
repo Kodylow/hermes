@@ -3,7 +3,7 @@ use std::str::FromStr;
 use crate::{
     invoice::{spawn_invoice_subscription, InvoiceState},
     mint::select_gateway,
-    models::{invoice::NewInvoice, zaps::Zap},
+    models::{app_user::NewAppUser, invoice::NewInvoice, zaps::Zap},
     routes::{LnurlCallbackParams, LnurlCallbackResponse, LnurlVerifyResponse},
     State,
 };
@@ -13,6 +13,7 @@ use fedimint_ln_client::LightningClientModule;
 use fedimint_ln_common::bitcoin::hashes::sha256;
 use fedimint_ln_common::bitcoin::secp256k1::Parity;
 use fedimint_ln_common::lightning_invoice::{Bolt11InvoiceDescription, Sha256};
+use nostr::PublicKey;
 use nostr::{Event, JsonUtil, Kind};
 
 use crate::routes::{LnurlStatus, LnurlType, LnurlWellKnownResponse};
@@ -28,9 +29,24 @@ pub async fn well_known_lnurlp(
     name: String,
 ) -> anyhow::Result<LnurlWellKnownResponse> {
     let user = state.db.get_user_by_name(name.clone())?;
-    if user.is_none() {
-        return Err(anyhow!("Not Found"));
-    }
+    let user = if let Some(user) = user {
+        user
+    } else {
+        // try is an npub
+        let pubkey = nostr::PublicKey::from_str(&name)?;
+
+        let new_app_user = NewAppUser {
+            pubkey: pubkey.to_hex(),
+            name: name.clone(),
+            federation_id: state
+                .default_federation_invite_code
+                .federation_id()
+                .to_string(),
+            federation_invite_code: state.default_federation_invite_code.to_string(),
+        };
+
+        state.db.insert_new_user(new_app_user)?
+    };
 
     let res = LnurlWellKnownResponse {
         callback: format!("{}/lnurlp/{}/callback", state.domain, name).parse()?,
@@ -40,7 +56,7 @@ pub async fn well_known_lnurlp(
         comment_allowed: None,
         tag: LnurlType::PayRequest,
         status: LnurlStatus::Ok,
-        nostr_pubkey: Some(state.nostr_sk.public_key()),
+        nostr_pubkey: Some(PublicKey::from_str(&user.pubkey)?),
         allows_nostr: true,
     };
 
