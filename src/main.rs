@@ -1,4 +1,3 @@
-use axum::headers::Origin;
 use axum::http::{Method, StatusCode, Uri};
 use axum::routing::get;
 use axum::{extract::DefaultBodyLimit, routing::post};
@@ -9,7 +8,6 @@ use matrix_sdk::ruma::UserId;
 use matrix_sdk::Client;
 use secp256k1::{All, Secp256k1};
 use std::{path::PathBuf, str::FromStr, sync::Arc};
-// use tbs::{AggregatePublicKey, PubKeyPoint};
 use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::oneshot;
 use tower_http::cors::{AllowOrigin, CorsLayer};
