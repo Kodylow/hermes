@@ -5,7 +5,8 @@ use axum::{extract::DefaultBodyLimit, routing::post};
 use axum::{http, Extension, Router, TypedHeader};
 use fedimint_core::api::InviteCode;
 use log::{error, info};
-use nostr_sdk::nostr::Keys;
+use matrix_sdk::ruma::UserId;
+use matrix_sdk::Client;
 use secp256k1::{All, Secp256k1};
 use std::{path::PathBuf, str::FromStr, sync::Arc};
 // use tbs::{AggregatePublicKey, PubKeyPoint};
@@ -70,12 +71,9 @@ pub struct State {
     db: Arc<dyn DBConnection + Send + Sync>,
     mm: Arc<dyn MultiMintWrapperTrait + Send + Sync>,
     pub secp: Secp256k1<All>,
-    pub nostr: nostr_sdk::Client,
-    pub nostr_sk: Keys,
+    pub matrix: matrix_sdk::Client,
     pub domain: String,
     pub default_federation_invite_code: InviteCode,
-    // pub free_pk: AggregatePublicKey,
-    // pub paid_pk: AggregatePublicKey,
 }
 
 impl State {
@@ -112,35 +110,25 @@ async fn main() -> anyhow::Result<()> {
             .expect("DEFAULT_FEDERATION_INVITE_CODE must be set"),
     )
     .expect("Invalid DEFAULT_FEDERATION_INVITE_CODE");
+    mm.register_new_federation(default_federation_invite_code.clone())
+        .await?;
 
-    // let free_pk = std::env::var("FREE_PK").expect("FREE_PK must be set");
-    // let paid_pk = std::env::var("PAID_PK").expect("PAID_PK must be set");
-    // let free_pk: AggregatePublicKey = AggregatePublicKey(
-    //     PubKeyPoint::from_compressed(
-    //         hex::decode(&free_pk).expect("Invalid key hex")[..]
-    //             .try_into()
-    //             .expect("Invalid key byte key"),
-    //     )
-    //     .expect("Invalid FREE_PK"),
-    // );
-    // let paid_pk: AggregatePublicKey = AggregatePublicKey(
-    //     PubKeyPoint::from_compressed(
-    //         hex::decode(&paid_pk).expect("Invalid key hex")[..]
-    //             .try_into()
-    //             .expect("Invalid key byte key"),
-    //     )
-    //     .expect("Invalid PAID_PK"),
-    // );
-
-    // nostr
-    let nostr_nsec_str = std::env::var("NSEC").expect("NSEC must be set");
-    let nostr_sk = Keys::from_str(&nostr_nsec_str).expect("Invalid NOSTR_SK");
-    let nostr = nostr_sdk::Client::new(&nostr_sk);
-    nostr
-        .add_relays(RELAYS)
-        .await
-        .expect("Failed to add relays");
-    nostr.connect().await;
+    // matrix
+    let matrix_user = std::env::var("MATRIX_USER").expect("MATRIX_USER must be set");
+    let matrix_homeserver =
+        std::env::var("MATRIX_HOMESERVER").expect("MATRIX_HOMESERVER must be set");
+    let matrix_password = std::env::var("MATRIX_PASSWORD").expect("MATRIX_PASSWORD must be set");
+    let matrix_user = UserId::parse(&format!("@{}:{}", matrix_user, matrix_homeserver))
+        .expect("Invalid matrix userid, should be in the format @MATRIX_USER:MATRIX_HOMESERVER");
+    let matrix = Client::builder()
+        .server_name(matrix_user.server_name())
+        .build()
+        .await?;
+    matrix
+        .matrix_auth()
+        .login_username(matrix_user, &matrix_password)
+        .send()
+        .await?;
 
     // domain
     let domain = std::env::var("DOMAIN_URL")
@@ -153,12 +141,9 @@ async fn main() -> anyhow::Result<()> {
         db,
         mm,
         secp,
-        nostr,
-        nostr_sk,
+        matrix,
         domain,
         default_federation_invite_code,
-        // free_pk,
-        // paid_pk,
     };
 
     // spawn a task to check for previous pending invoices

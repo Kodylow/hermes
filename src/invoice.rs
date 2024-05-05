@@ -7,8 +7,7 @@ use fedimint_ln_client::{LightningClientModule, LnReceiveState};
 use futures::StreamExt;
 use itertools::Itertools;
 use log::{error, info};
-use nostr::{Event, EventBuilder, JsonUtil};
-use nostr_sdk::Client;
+use matrix_sdk::ruma::UserId;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -86,7 +85,6 @@ pub(crate) async fn spawn_invoice_subscription(
     subscription: UpdateStreamOrOutcome<LnReceiveState>,
 ) {
     spawn("waiting for invoice being paid", async move {
-        let nostr = state.nostr.clone();
         let mut stream = subscription.into_stream();
         while let Some(op_state) = stream.next().await {
             // TODO if anything fails here, try again
@@ -106,7 +104,7 @@ pub(crate) async fn spawn_invoice_subscription(
                 }
                 LnReceiveState::Claimed => {
                     info!("Payment claimed");
-                    match notify_user(&nostr, &state, &i, user).await {
+                    match notify_user(&state, &i, user).await {
                         Ok(_) => {
                             match state.db.set_invoice_state(i, InvoiceState::Settled as i32) {
                                 Ok(_) => (),
@@ -128,12 +126,7 @@ pub(crate) async fn spawn_invoice_subscription(
     });
 }
 
-async fn notify_user(
-    nostr: &Client,
-    state: &State,
-    invoice: &Invoice,
-    user: AppUser,
-) -> Result<()> {
+async fn notify_user(state: &State, invoice: &Invoice, user: AppUser) -> Result<()> {
     let zap = state.db.get_zap_by_id(invoice.id)?;
     let invite_code = state
         .mm
@@ -144,38 +137,22 @@ async fn notify_user(
         .invite_code(&PeerId::from_str("0")?)
         .ok_or(anyhow!("Internal error: No invite code for 0"))?;
 
-    let dm = nostr
-        .send_direct_msg(
-            ::nostr::PublicKey::from_str(&user.pubkey)?,
-            json!({
-                "invite_code": invite_code,
-                "tweak_index": invoice.user_invoice_index,
-                "amount": invoice.amount,
-                "bolt11": invoice.bolt11,
-                "preimage": invoice.preimage,
-                "zap_request": zap.as_ref().map(|z| z.request.clone()),
-            })
-            .to_string(),
-            None,
-        )
-        .await?;
+    let user_id = UserId::parse(&format!(
+        "@{}:matrix-synapse-homeserver2.dev.fedibtc.com",
+        user.name
+    ))?;
+    let dm_room = state.matrix.create_dm(&user_id).await?;
+    let content = json!({
+        "inviteCode": invite_code,
+        "tweakIndex": invoice.user_invoice_index,
+        "amount": invoice.amount,
+        "bolt11": invoice.bolt11,
+        "preimage": invoice.preimage,
+        "zapRequest": zap.as_ref().map(|z| z.request.clone()),
+        "body": "You've been sent a hermes payment. Use the Fedi App to accept this payment.",
+    });
+    let dm = dm_room.send_raw("m.room.message", content).await?;
 
-    // Send zap if needed
-    if let Some(zap) = zap {
-        let request = Event::from_json(&zap.request)?;
-        let event = EventBuilder::zap_receipt(
-            invoice.bolt11.to_string(),
-            Some(invoice.preimage.clone()),
-            request,
-        )
-        .to_event(&state.nostr_sk)?;
-
-        let event_id = nostr.send_event(event).await?;
-        info!("Broadcasted zap {event_id}!");
-
-        state.db.set_zap_event_id(zap, event_id.to_string())?;
-    }
-
-    info!("Sent nostr dm: {dm}");
+    info!("Sent matrix dm, response: {:?}", dm);
     Ok(())
 }
