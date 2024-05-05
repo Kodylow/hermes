@@ -48,24 +48,6 @@ const ALLOWED_LOCALHOST: &str = "http://127.0.0.1:";
 
 const API_VERSION: &str = "v1";
 
-const RELAYS: [&str; 9] = [
-    "wss://nostr.mutinywallet.com",
-    "wss://relay.mutinywallet.com",
-    "wss://relay.snort.social",
-    "wss://nos.lol",
-    "wss://relay.damus.io",
-    "wss://relay.primal.net",
-    "wss://nostr.wine",
-    "wss://nostr.zbd.gg",
-    "wss://relay.nos.social",
-];
-
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub struct SignerIdentity {
-    pub service_id: i32,
-    pub plan_id: i32,
-}
-
 #[derive(Clone)]
 pub struct State {
     db: Arc<dyn DBConnection + Send + Sync>,
